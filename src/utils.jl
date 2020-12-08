@@ -1,30 +1,21 @@
-function linearBinSearch( array::Array{T1,1}, querry::T2 ) where {T1<:Number,T2<:Number}
+function linearBinSearch( array::Array{T1,1}, query::T2 ) where {T1<:Number,T2<:Number}
 
-    querry  > array[end] && ( return 0 )
-    querry  < array[1]   && ( return 0 )
-	querry == array[1]   && ( return 1 )
-
-    idx = 1; 	
-
+    idx = 0; 	
     @inbounds for e in 1:length(array)
+        query <= array[ e ] && break
         idx = e; 
-        querry <= array[ e ] && break
     end
 
-    return idx-1
+    return idx
 end
 
-function binaryBinSearch( array::Array{T1,1}, querry::T2 ) where {T1<:Number,T2<:Number}
-
-    querry  > array[end] && ( return 0 )
-    querry  < array[1]   && ( return 0 )
-	querry == array[1]   && ( return 1 )
+function binaryBinSearch( array::Array{T1,1}, query::T2 ) where {T1<:Number,T2<:Number}
 
     hi, lo, probe = length( array ) + 1, 0, 0; 
     
     @inbounds while 1 < hi - lo
         probe = ( hi + lo ) >>> 1  
-        if array[probe] < querry
+        if array[probe] < query
             lo = probe 
         else 
             hi = probe
