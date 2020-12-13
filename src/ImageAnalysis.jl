@@ -1,6 +1,6 @@
 module ImageAnalysis
 
-using FileIO, ColorTypes
+using FileIO, ColorTypes, FFTW
 
 include("IO.jl")
 include("utils.jl")
