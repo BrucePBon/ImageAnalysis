@@ -8,6 +8,10 @@ include("stats.jl")
 include("histogram.jl")
 include("clusters.jl")
 include("kernels.jl")
+include("watershed.jl")
+include("thresholding.jl")
+include("morphology.jl")
+include("CCL.jl")
 
 greet() = print("Hello World!")
 
