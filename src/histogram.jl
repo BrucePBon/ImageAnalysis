@@ -138,6 +138,21 @@ function otsu( p::Array{Float32,1} )
 	return maxK
 end
 
+function otsu( img, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where {T1<:Real,T2<:Real,T3<:Real,T4<:Real}
+
+	nh, _, _ = normhistogram( img, bin_data )
+	ot = otsu( nh );
+
+	println( "Otsu threshold = ", ot );
+	mask = zeros( Bool, size(img) );
+
+	for e in 1:length(img)
+		mask[e] = img[e] > ot
+	end
+
+	return mask
+end
+
 function otsuArr( p::Array{Float32,1} )
 
 	arr   = copy( p )
