@@ -1,61 +1,62 @@
-# Computing bins.
-# A range is suitable when the min, max and step values are known ( min:step:max ).
-# When the step is not know, the number of divisions is used to compute a step.
-# In this case, the inputs should a tuple with ( min, max, divisions )
-
-function bins( inputs::Tuple{T1,T2,T3} ) where {T1<:Real,T2<:Real,T3<:Real}
+""" 
+	BINS
+"""
+# ( min, max, # bins - 1 )
+function bins( inputs::Tuple{<:Real,<:Real,<:Real} ) 
     min, max, divs = convert.( Float32, inputs )
-    return bins( min, max, (max-min)/divs )
+    return bins( min, max, (max-min)/divs == 0 ? 1.0 : (max-min)/divs  )
 end
 
-bins( min, max, step ) = bins( ( min, max, step ) )
+# ( min, max, step )
+bins( min, max, step ) = bins( Float32(min), Float32(max), Float32(step)  )
 bins( min::Float32, max::Float32, step::Float32 ) = collect( min:step:max )
-bins( range::AbstractRange{T} ) where { T<:Real } = collect( convert(Float32, range.start):convert(Float32, range.step):convert( Float32, range.stop ) )
 
-# Histogram implementation
+# range
+bins( range::AbstractRange ) = Float32.( collect( range ) )
 
-function histogram( image, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where {T1<:Real,T2<:Real,T3<:Real,T4<:Real}
+
+"""
+	HISTOGRAMS
+"""
+function histogram( image, numbins::Integer ) 
+	min, max = extrema( image );
+	return histogram( image, Float32.((min,max,numbins)) )
+end
+
+function histogram( image, bin_data::Union{Tuple{<:Real,<:Real,<:Real}, AbstractRange }, T=Int32 )
 
     bin_intervals = bins( bin_data );
-    histogram = zeros( Int32, length(bin_intervals) - 1 );
-    outs = 0; # pixels that don't fall into any interval are added to "outs"
+    histogram = zeros( T, length(bin_intervals) - 1 );
+    outs = 0; # keeps count of pixels that don't fall into any interval
 
     @inbounds for pixel in image
-
-        # check if pixel falls into any of the intervals
         idx = binaryBinSearch( bin_intervals, pixel )
 
         if idx == 0
             outs += 1;
         else
-            histogram[idx] += 1;
+            histogram[idx] += T(1);
         end
     end
 
     return histogram, outs, bin_intervals
 end
 
-function normhistogram( image, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where {T1<:Real,T2<:Real,T3<:Real,T4<:Real}
+function normhistogram( image, numbins::Integer ) 
+	min, max = extrema( image );
+	return normhistogram( image, Float32.((min,max,numbins)) )
+end
 
-    bin_intervals = bins( bin_data );
-    histogram = zeros( Float32, length(bin_intervals) - 1 );
-    onef = Float32(1.0)
-    outs = 0;
+function normhistogram( image, bin_data::Union{Tuple{<:Real,<:Real,<:Real}, AbstractRange } )
 
-    @inbounds for pixel in image
-        idx = binaryBinSearch( bin_intervals, pixel )
-        if idx == 0
-            outs += 1;
-        else
-            histogram[idx] += onef;
-        end
-    end
+	h, o, b = histogram( image, bin_data, Float32 )
+
 	N = length( image );
-	@simd for e in 1:length(histogram)
-		@inbounds histogram[e] /= N
+	@inbounds @simd for e in 1:length(h)
+		h[e] /= N
 	end
 
-    return histogram, outs, bin_intervals
+    return h, o, b
 end
 
 # Cumulative density function from histogram
@@ -148,6 +149,23 @@ function otsu( img, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where 
 
 	for e in 1:length(img)
 		mask[e] = img[e] > ot
+	end
+
+	return mask
+end
+
+function otsu( img::Array{<:Real,N} ) where {N}
+
+	mn, mx = extrema( img ); 
+	bin_data = mn:(mx-mn)/100:mx; 
+	nh, _, _ = normhistogram( img, bin_data )
+	ot = otsu( nh );
+
+	println( "Otsu threshold = ", ot );
+	mask = zeros( UInt8, size(img) );
+
+	for e in 1:length(img)
+		mask[e] = reinterpret( UInt8, img[e] > ot )
 	end
 
 	return mask

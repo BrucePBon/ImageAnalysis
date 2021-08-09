@@ -1,3 +1,5 @@
+# My first attempt at comming up with efficient connected components 
+
 function groupTRUES( mask::Array{Bool,2} ) 
 
 	h, w = size( mask ); 

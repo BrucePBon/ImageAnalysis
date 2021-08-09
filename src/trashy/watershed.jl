@@ -1,3 +1,4 @@
+# what is this even?
 function localMinima( image::Array{T,2} ) where {T<:Real}
 
     minima_r = [];
