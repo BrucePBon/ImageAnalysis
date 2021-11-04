@@ -106,6 +106,24 @@ function eqim( img, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where 
     return eqim
 end
 
+function eqim( img::Array{<:AbstractFloat,2}, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where {T1<:Real,T2<:Real,T3<:Real,T4<:Real}
+
+	bs   = bins( bin_data );
+	_cdf, _, _ = cdf( img, bin_data );
+    eqim = copy( img );
+
+    for e in 1:length(img)
+        pixel = img[e]
+        for idx in 1:length(bs)-1
+            if pixel > bs[idx] && pixel <= bs[idx+1]
+                eqim[e] = floor( length(bs)*_cdf[idx] );
+            end
+        end
+
+    end
+    return eqim
+end
+
 # Otsu thresholding
 # Does it only work on integers...?
 

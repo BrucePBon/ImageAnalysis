@@ -72,7 +72,7 @@ end
 
 
 
-function integralArea( arr::AbstractArray{<:Real,3}, TL, BR )
+function integralArea( intArr::AbstractArray{<:Real,3}, TL, BR )
 	TL = TL .+ 1; 
 	BR = BR .+ 1; 
 	area  = intArr[BR[1],BR[2],BR[3]] - intArr[TL[1],TL[2],TL[3]]

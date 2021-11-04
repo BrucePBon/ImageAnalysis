@@ -1,6 +1,6 @@
 # short named functions, not flexible, bad assumptions or improper namings might be commited
 
-function convolution( image::Array{T1,2}, kernel::Array{T2,2}; typ=Float32 ) where {T1<:Real,T2<:Real}
+function convolution( image::Array{T1,N}, kernel::Array{T2,N}; typ=Float32 ) where {T1<:Real,T2<:Real,N}
 	return FFTConvolution( image, kernel, typ=typ );
 end
 
@@ -80,20 +80,73 @@ function paddedConvolution( image::Array{T1,2}, kernel::Array{T2,2}; typ=Float32
 	return corrmatrix
 end
 
-function FFTConvolution( image::Array{T1,2}, kernel::Array{T2,2}; typ=Float32 ) where {T1<:Real,T2<:Real}
+function FFTConvolution!( image::Array{<:Real,N}, kernel::Array{<:Real,N}, conv::Array{T,N} ) where {T,N}
 
-	paddedkernel = zeros( typ, size(image) .+ size(kernel) .- 1 );
-	paddedkernel[ 1:size(kernel,1), 1:size(kernel,2) ] .= convert.( typ, kernel )
+	@assert all( size(conv) .== size(image) .+ size(kernel) .- 1 ); 
+	
+	paddedkernel = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
+	paddedkernel[ 1:size(kernel,1), 1:size(kernel,2), 1:size(kernel,3) ] .= convert.( Complex{T}, kernel )
 
-	paddedimage  = zeros( typ, size(image) .+ size(kernel) .- 1 );
-	paddedimage[ 1:size(image,1), 1:size(image,2) ] .= convert.( typ, image )
+	paddedimage  = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
+	paddedimage[ 1:size(image,1), 1:size(image,2), 1:size(image,3) ] .= convert.( Complex{T}, image )
 
-	Ff = FFTW.fft( paddedimage  );
-	Fg = FFTW.fft( paddedkernel );
+	FFTW.fft!( paddedimage  );
+	FFTW.fft!( paddedkernel );
 
-	Fcorr =  Ff .* Fg;
+	@inbounds @simd for idx in 1:length(paddedimage)
+		paddedimage[idx] = paddedimage[idx] * paddedkernel[idx]
+	end
 
-	return real.( FFTW.ifft( Fcorr ) )
+	FFTW.ifft!( paddedimage ); 
+
+	@inbounds @simd for idx in 1:length(paddedimage)
+		conv[idx] = real( paddedimage[idx] )
+	end
+
+	return conv
+end
+
+function FFTConvolution( image::Array{<:Real,N}, kernel::Array{<:Real,N}; typ=Float32 ) where {N}
+
+	return FFTConvolution!( image, kernel, zeros( typ, size(image).+size(kernel).-1) ); 
+end
+
+function FFTConvolution_crop!( image::Array{<:Real,N}, kernel::Array{<:Real,N}, conv::Array{T,N} ) where {T,N}
+
+	@assert all( size(conv) .== size(image) ); 
+	
+	paddedkernel = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
+	paddedkernel[ 1:size(kernel,1), 1:size(kernel,2), 1:size(kernel,3) ] .= convert.( Complex{T}, kernel )
+
+	paddedimage  = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
+	paddedimage[ 1:size(image,1), 1:size(image,2), 1:size(image,3) ] .= convert.( Complex{T}, image )
+
+	FFTW.fft!( paddedimage  );
+	FFTW.fft!( paddedkernel );
+
+	@inbounds @simd for idx in 1:length(paddedimage)
+		paddedimage[idx] = paddedimage[idx] * paddedkernel[idx]
+	end
+
+	FFTW.ifft!( paddedimage ); 
+
+	offs = div.( size( kernel ), 2 ); 
+	if N == 2 
+		offs[3] = 0
+	end
+
+	for zet in 1+offs[3]:size(image,3)+offs[3]
+	for col in 1+offs[2]:size(image,2)+offs[2]
+		@simd for row in 1+offs[1]:size(image,1)+offs[1]
+			conv[row-offs[1],col-offs[2],zet-offs[3]] = real( paddedimage[row,col,zet] )
+	end end end
+
+	return conv
+end
+
+function FFTConvolution_crop( image::Array{<:Real,N}, kernel::Array{<:Real,N}; typ=Float32 ) where {N}
+
+	return FFTConvolution_crop!( image, kernel, zeros( typ, size(image) ) ); 
 end
 
 function FFTConvolution_b( image::Array{T1,2}, kernel::Array{T2,2}; typ=Float32 ) where {T1<:Real,T2<:Real}
