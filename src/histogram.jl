@@ -128,19 +128,29 @@ end
 # Does it only work on integers...?
 
 function o_varB( k, sumP, sumIP, meanT )
+	w0 = sumP[k]; 
+	w1 = sumP[end] - sumP[k]; 
+	m0 = sumP[k]
+	m1 = sumP[end] - sumP[k]; 
+	return w0*w1*( m0 - m1 )^2
 	return ( meanT*sumP[k] - sumIP[k] )^2/( sumP[k]*( 1 - sumP[k] ) )
 end
 
-function otsu( p::Array{Float32,1} )
+function otsu( p::Array{Float32,1}; min=0, step=1, max=255 )
 
 	L = length( p )
-	sumP  = copy( p )
-	sumIP = copy( p )
-	@simd for i in 2:L
-		 @inbounds sumP[i] += sumP[ i - 1 ]
+
+	sumP = copy( p )
+	@inbounds for i in 2:L
+		sumP[i] += sumP[ i - 1 ]
 	end
-	@simd for i in 2:L
-		 @inbounds sumIP[i] = i*p[i] + sumIP[ i - 1 ]
+
+	sumIP = zeros( Float32, L )
+	sumIP[1] = min
+	ith_bin  = min + step
+	@inbounds for i in 2:L
+		sumIP[i] = ith_bin*p[i] + sumIP[ i - 1 ]
+		ith_bin += step; 
 	end
 	meanT = sumIP[end]
 
@@ -154,7 +164,7 @@ function otsu( p::Array{Float32,1} )
 		end
 	end
 
-	return maxK
+	return maxK*step
 end
 
 function otsu( img, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where {T1<:Real,T2<:Real,T3<:Real,T4<:Real}
@@ -162,7 +172,7 @@ function otsu( img, bin_data::Union{Tuple{T1,T2,T3}, AbstractRange{T4}} ) where 
 	nh, _, _ = normhistogram( img, bin_data )
 	ot = otsu( nh );
 
-	println( "Otsu threshold = ", ot );
+	#println( "Otsu threshold = ", ot );
 	mask = zeros( Bool, size(img) );
 
 	for e in 1:length(img)
@@ -179,7 +189,7 @@ function otsu( img::Array{<:Real,N} ) where {N}
 	nh, _, _ = normhistogram( img, bin_data )
 	ot = otsu( nh );
 
-	println( "Otsu threshold = ", ot );
+	#println( "Otsu threshold = ", ot );
 	mask = zeros( UInt8, size(img) );
 
 	for e in 1:length(img)
@@ -189,18 +199,22 @@ function otsu( img::Array{<:Real,N} ) where {N}
 	return mask
 end
 
-function otsuArr( p::Array{Float32,1} )
+function otsuArr( p::Array{Float32,1}; min=0, step=1, max=255 )
 
-	arr   = copy( p )
-
+	arr = copy( p )
 	L = length( p )
+
 	sumP  = copy( p )
-	sumIP = copy( p )
 	@simd for i in 2:L
 		 @inbounds sumP[i] += sumP[ i - 1 ]
 	end
-	@simd for i in 2:L
-		 @inbounds sumIP[i] = i*p[i] + sumIP[ i - 1 ]
+
+	sumIP = zeros( Float32, L )
+	sumIP[1] = min
+	ith_bin  = min + step
+	@inbounds for i in 2:L
+		sumIP[i] = ith_bin*p[i] + sumIP[ i - 1 ]
+		ith_bin += step; 
 	end
 	meanT = sumIP[end]
 

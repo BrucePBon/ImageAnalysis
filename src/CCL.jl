@@ -82,6 +82,42 @@ function OAATccl( mask::Array{Bool,2}; connectivity=connectivity4() )
     return components;
 end
 
+function OAATccl_rev( mask::Array{Bool,2}; connectivity=connectivity4() )
+
+    h, w  = size(mask);
+    mask_ = copy(mask);
+
+    components = Array{Array{Tuple{Int64,Int64},1},1}(undef,0);
+    comp_idx   =  0;
+    stack      = [];
+
+    for col in 1:w, row in 1:h
+
+        # starting the process
+        if !mask_[ row, col ]
+            comp_idx += 1;
+            push!( components, Array{Tuple{Int64,Int64},1}(undef,0) )
+            push!( stack, (row,col) );
+            mask_[ row, col ] = true
+        end
+
+        # Iterating
+        while length(stack) > 0
+            idx = pop!( stack )
+            push!( components[comp_idx], idx );
+
+            for off in connectivity
+                r, c = min.((h,w), max.(1, idx .+ off))
+                if !mask_[r,c]
+                    push!( stack, ( r, c ) );
+                    mask_[r,c] = true
+                end
+            end
+        end
+    end
+    return components;
+end
+
 function getBorders_Centroid( ccl, mask ) 
     borders  = Array{typeof(ccl[1]),1}( undef,0 ); 
     centroid = zeros( Float32, length( ccl[1] ) );
@@ -144,6 +180,43 @@ end
 
 
 """ one at a time connected component labelling in OAAT 3D """
+
+function OAATccl( mask::Array{Bool,3}; ref=true, connectivity=connectivity8() )
+
+    h, w, d = size(mask);
+    mask_   = copy(mask);
+
+    components = Array{Array{Tuple{Int64,Int64,Int64},1},1}(undef,0);
+    comp_idx   =  0;
+    stack      = [];
+
+	for zet in 1:d, col in 1:w, row in 1:h
+
+        if mask_[ row, col, zet ] == ref
+            comp_idx += 1;
+            push!( components, Array{Tuple{Int64,Int64,Int64},1}(undef,0) )
+            push!( stack, (row,col,zet) );
+            mask_[ row,col,zet ] = !ref
+        end
+
+        # Iterating
+        while length(stack) > 0
+            idx = pop!( stack )
+            push!( components[comp_idx], idx );
+
+            for off in connectivity
+                r, c, z = min.( (h,w,d), max.( 1, idx .+ off ) )
+                if mask_[r,c,z] == ref
+                    push!( stack, ( r, c, z ) );
+                    mask_[ r,c,z ] = !ref
+                end
+            end
+        end
+
+    end
+
+    return components;
+end
 
 function OAATccl( mask::Array{UInt8,3}; ref=UInt8(1), connectivity=connectivity8() )
 

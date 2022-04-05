@@ -2,20 +2,17 @@
 	2D
 """
 
-function integralArray!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}, fun=(x)->(x) ) 
+function integralArray( img::AbstractArray{<:Real,2}; type=Float32, fun=(x)->(x) )
+	return integralArray!( img, zeros( type, size(img) .+ 1 ), fun=fun )
+end
+
+function integralArray!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}; fun=(x)->(x) ) 
 	
-	@inbounds for c in 2:size(img,2)+1, r in 2:size(img,1)+1
-		intArr[r,c] = fun(img[r-1,c-1]) + intArr[r-1,c] + intArr[r,c-1] - intArr[r-1,c-1]
+	@inbounds for c in 1:size(img,2), r in 1:size(img,1)
+		intArr[1+r,1+c] = fun(img[r,c]) + intArr[1+r-1,1+c] + intArr[1+r,1+c-1] - intArr[1+r-1,1+c-1]
 	end
 	return intArr
 end
-
-function integralArray( img::AbstractArray{<:Real,2}; type=Float32, fun=(x)->(x) )
-
-	return integralArray!( img, zeros( type, size(img) .+ 1 ), fun )
-end
-
-
 
 function integralArea( intArr::AbstractArray{<:Real,2}, TL, BR )
 	TL   = TL .+ 1;
@@ -23,7 +20,139 @@ function integralArea( intArr::AbstractArray{<:Real,2}, TL, BR )
 	area = intArr[BR[1],BR[2]] - intArr[BR[1],TL[2]] - intArr[TL[1],BR[2]] + intArr[TL[1],TL[2]]
 end
 
+# integral array for ZNCC, copied from quickPIV
 
+function integralArrayZNCC( padData::AbstractArray{Complex{T},N} ) where {T<:AbstractFloat,N}
+	return integralArrayZNCC!( padData, zeros( T, size(padData).+1 ) ); 
+end
+
+function integralArrayZNCC!( padData::AbstractArray{Complex{T},2}, intArr::Array{T,2} ) where {T<:AbstractFloat}
+
+	h, w = size(intArr) .- 1
+
+	@inbounds for c in 2:w+1, r in 2:h+1
+		intArr[r,c] = (padData[r-1,c-1].re)^2 + intArr[r-1,c] + intArr[r,c-1] - intArr[r-1,c-1]
+	end
+
+	return intArr
+end
+
+function integralArrayZNCC!( padData::AbstractArray{Complex{T},3}, intArr::Array{T,3} ) where {T<:AbstractFloat} 
+
+	h, w, d = size(intArr) .- 1;
+	@inbounds for z in 2:d+1, c in 2:w+1
+		tmp = 0.0; 
+		for r in 2:h+1      
+			val2          = real( padData[r-1,c-1,z-1] )^2
+			intArr[r,c,z] = val2 + intArr[r,c-1,z] + intArr[r,c,z-1] - intArr[r,c-1,z-1] + tmp;
+			tmp          += val2; 
+	end end
+
+	return intArr
+end
+
+# what did IIM mean...?
+
+function integralArrayIIM!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,3}, z ) 
+	
+	@inbounds for c in 1:size(img,2), r in 1:size(img,1)
+		intArr[1+r,1+c,z] = img[r,c] + intArr[1+r-1,1+c,z] + intArr[1+r,1+c-1,z] - intArr[1+r-1,1+c-1,z]
+	end
+	return intArr
+end
+
+function integralAreaIIM( intArr::AbstractArray{<:Real,3}, z,TL, BR )
+	TL   = TL .+ 1;
+	BR   = BR .+ 1;
+	area = intArr[BR[1],BR[2],z] - intArr[BR[1],TL[2],z] - intArr[TL[1],BR[2],z] + intArr[TL[1],TL[2],z]
+end
+
+
+# Considering offset of the img within the integral array
+
+function integralArray_off( img::AbstractArray{<:Real,2}, off=(0,0); type=Float32, fun=(x)->(x) )
+	return integralArray_off!( img, zeros( type, size(img) .+ 1 ), off, fun=fun )
+end
+
+function integralArray_off!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}, off=(0,0); fun=(x)->(x)) 
+	
+	@inbounds for c in 1:size(img,2), r in 1:size(img,1)
+		intArr[1+r+off[1],1+c+off[2]] = fun(img[r,c]) + intArr[1+r-1+off[1],1+c+off[2]] + intArr[1+r+off[1],1+c-1+off[2]] - intArr[1+r-1+off[1],1+c-1+off[2]]
+	end
+	return intArr
+end
+
+# Specific function to compute mean maxima and minima, which requires padded integral arrays
+
+function integralArray_pad( img::AbstractArray{<:Real,2}, pad=(0,0); type=Float32, fun=(x)->(x) )
+	return integralArray_pad!( img, zeros( type, size(img) .+ 1 .+ 2 .* pad ), pad, fun=fun )
+end
+
+function integralArray_pad!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}, pad; fun=(x)->(x) ) 
+	
+	for c in 1:size(img,2)      # c    = column in input image
+		c_ia = 1+c+pad[2];      # c_ia = offset column index in integral array
+		for r in 1:size(img,1)  # r    = row in input image
+			r_ia = 1+r+pad[1];  # r_ia = offset row index in integral array
+			intArr[r_ia,c_ia] = fun(img[r,c]) + intArr[r_ia-1,c_ia] + intArr[r_ia,c_ia-1]- intArr[r_ia-1,c_ia-1]
+	end end
+
+	lastr = 1+size(img,1)+pad[1]; 
+	lastc = 1+size(img,2)+pad[2];
+
+	for c in 1:lastc
+		val = intArr[lastr,c]
+		for r in lastr+1:size(intArr,1)
+			intArr[r,c] = val
+	end end
+
+	for c in lastc+1:size(intArr,2)
+		intArr[:,c] .= intArr[:,c-1]
+	end
+
+	return intArr
+end
+
+function integralArray_pad( vol::AbstractArray{<:Real,3}, pad=(0,0,0); type=Float32, fun=(x)->(x) )
+	return integralArray_pad!( vol, zeros( type, size(vol) .+ 1 .+ 2 .*pad ), pad, fun=fun )
+end
+
+function integralArray_pad!( vol::AbstractArray{<:Real,3}, intArr::AbstractArray{<:AbstractFloat,3}, pad; fun=(x)->(x)) 
+
+	for z in 1:size(vol,3)         # z    = depth index in input volume
+		z_ia = z+pad[3]+1;         # z_ia = offset depth index in integral array
+		for c in 1:size(vol,2)     # c    = columns in input volume
+			c_ia = c+pad[2]+1;     # c_ia = offset column index in integral array
+			reuse = 0.0
+			for r in 1:size(vol,1) # r    = row in input volume
+				r_ia = r+pad[1]+1; # r_ia = offset row index in integral array
+				tmp = fun(vol[r,c,z])
+				intArr[r_ia,c_ia,z_ia] = tmp + intArr[r_ia,c_ia-1,z_ia] + intArr[r_ia,c_ia,z_ia-1] - intArr[r_ia,c_ia-1,z_ia-1] + reuse; 
+				reuse += tmp
+	end end end
+
+	lastr = 1+size(vol,1)+pad[1]; 
+	lastc = 1+size(vol,2)+pad[2];
+	lastz = 1+size(vol,3)+pad[3];
+
+	for z in 1:lastz
+		for c in 1:lastc
+			val = intArr[lastr,c,z]
+			for r in lastr+1:size(intArr,1)
+				intArr[r,c,z] = val
+		end end 
+
+		for c in lastc+1:size(intArr,2)
+			intArr[:,c,z] .= intArr[:,c-1,z]
+		end
+	end
+
+	for z in lastz+1:size(intArr,3)
+		intArr[:,:,z] .= intArr[:,:,z-1]
+	end
+
+	return intArr
+end
 
 # Reversed variant, which is used during normalized cross-correlation
 function integralArrayRev!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}, fun=(x)->(x) ) 
