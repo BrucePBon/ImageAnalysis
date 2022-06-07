@@ -192,7 +192,7 @@ function OAATccl( mask::Array{Bool,3}; ref=true, connectivity=connectivity8() )
 
 	for zet in 1:d, col in 1:w, row in 1:h
 
-        if mask_[ row, col, zet ] == ref
+        if mask_[ row, col, zet ] === ref
             comp_idx += 1;
             push!( components, Array{Tuple{Int64,Int64,Int64},1}(undef,0) )
             push!( stack, (row,col,zet) );
@@ -206,7 +206,7 @@ function OAATccl( mask::Array{Bool,3}; ref=true, connectivity=connectivity8() )
 
             for off in connectivity
                 r, c, z = min.( (h,w,d), max.( 1, idx .+ off ) )
-                if mask_[r,c,z] == ref
+                if mask_[r,c,z] === ref
                     push!( stack, ( r, c, z ) );
                     mask_[ r,c,z ] = !ref
                 end
@@ -262,7 +262,7 @@ end
 
 """ Utility functions """
 
-function CCLlimits( ccl )
+function CCLlimits( ccl::Array{Tuple{Int64,Int64},1} )
 	miny = typemax(eltype(ccl[1]))
 	minx = typemax(eltype(ccl[1]))
 	maxy = 0
@@ -274,6 +274,24 @@ function CCLlimits( ccl )
 		maxx = ( coords[2] > maxx ) ? coords[2] : maxx
 	end
 	return miny, minx, maxy, maxx
+end
+
+function CCLlimits( ccl::Array{Tuple{Int64,Int64,Int64},1} )
+	miny = typemax(eltype(ccl[1]))
+	minx = typemax(eltype(ccl[1]))
+    minz = typemax(eltype(ccl[1]))
+	maxy = 0
+	maxx = 0
+    maxz = 0
+	@simd for coords in ccl
+		miny = ( coords[1] < miny ) ? coords[1] : miny
+		minx = ( coords[2] < minx ) ? coords[2] : minx
+		minz = ( coords[3] < minz ) ? coords[3] : minz
+		maxy = ( coords[1] > maxy ) ? coords[1] : maxy
+		maxx = ( coords[2] > maxx ) ? coords[2] : maxx
+		maxz = ( coords[3] > maxz ) ? coords[3] : maxz
+	end
+	return miny, minx, minz, maxy, maxx, maxz
 end
 
 function CCLcentroid( ccl::Array{Tuple{Int64,Int64,Int64},1} )

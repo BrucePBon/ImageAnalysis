@@ -67,6 +67,23 @@ function integralAreaIIM( intArr::AbstractArray{<:Real,3}, z,TL, BR )
 	area = intArr[BR[1],BR[2],z] - intArr[BR[1],TL[2],z] - intArr[TL[1],BR[2],z] + intArr[TL[1],TL[2],z]
 end
 
+# Considering offset of the img within the integral array
+
+function integralArray_subimg( img::AbstractArray{<:Real,2}, range=(0,0,0,0); type=Float32, fun=(x)->(x) )
+	return integralArray_subimg!( img, zeros( type, size(img) .+ 1 ), off, fun=fun )
+end
+
+function integralArray_subimg!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}, range=(0,0,0,0); fun=(x)->(x)) 
+	
+	ymin, ymax = range[1], range[2]; 
+	xmin, xmax = range[3], range[4];
+
+	@inbounds for c in xmin:xmax, r in ymin:ymax
+		ir, ic = r - ymin, c - xmin; 
+		intArr[1+ir,1+ic] = fun(img[r,c]) + intArr[1+ir-1+off[1],1+ic] + intArr[1+ir,1+ic-1] - intArr[1+ir-1,1+ic-1]
+	end
+	return intArr
+end
 
 # Considering offset of the img within the integral array
 
@@ -181,6 +198,12 @@ end
 #                     arr[r,c-1,z-1] - arr[r-1,c,z-1] - arr[r-1,c-1,z] + arr[r-1,c-1,z-1]
 #    end
 
+
+function integralArray( vol::AbstractArray{<:Real,3}; type=Float32, fun=(x)->(x) )
+
+	return integralArray!( vol, zeros( type, size(vol) .+ 1 ), fun )
+end
+
 function integralArray!( vol::AbstractArray{<:Real,3}, intArr::AbstractArray{<:AbstractFloat,3}, fun=(x)->(x) )
 
 	@inbounds for z in 2:size(vol,3)+1, c in 2:size(vol,2)+1
@@ -194,11 +217,47 @@ function integralArray!( vol::AbstractArray{<:Real,3}, intArr::AbstractArray{<:A
 	return intArr
 end
 
-function integralArray( vol::AbstractArray{<:Real,3}; type=Float32, fun=(x)->(x) )
+function integralArray_masked( vol::AbstractArray{<:Real,3}, mask; type=Float32, fun=(x)->(x) )
 
-	return integralArray!( vol, zeros( type, size(vol) .+ 1 ), fun )
+	return integralArray_masked!( vol, mask, zeros( type, size(vol) .+ 1 ), fun )
 end
 
+
+function integralArray_masked!( vol::AbstractArray{<:Real,3}, mask, intArr::AbstractArray{<:AbstractFloat,3}, fun=(x)->(x) )
+
+	@inbounds for z in 2:size(vol,3)+1, c in 2:size(vol,2)+1
+		reuse = 0.0
+		for r in 2:size(vol,1)+1
+			tmp = fun(vol[r-1,c-1,z-1])*mask[r-1,c-1,z-1]
+			intArr[r,c,z] = tmp + intArr[r,c-1,z] + intArr[r,c,z-1] - intArr[r,c-1,z-1] + reuse; 
+			reuse += tmp
+		end
+	end
+	return intArr
+end
+
+function integralArray_subvol( img::AbstractArray{<:Real,3}, range=(0,0,0,0,0,0); type=Float32, fun=(x)->(x) )
+	return integralArray_subvol!( img, zeros( type, size(img) .+ 1 ), range, fun=fun )
+end
+
+function integralArray_subvol!( img::AbstractArray{<:Real,3}, intArr::AbstractArray{<:AbstractFloat,3}, range=(0,0,0,0,0,0); fun=(x)->(x)) 
+	
+	ymin, ymax = range[1], range[2]; 
+	xmin, xmax = range[3], range[4];
+	zmin, zmax = range[5], range[6];
+
+	@inbounds for z in zmin:zmax, c in xmin:xmax
+		iz, ic = z - zmin + 1, c - xmin + 1; 
+		reuse = 0.0
+		for r in ymin:ymax
+			ir = r - ymin + 1;
+			tmp = fun(img[r,c,z])
+			intArr[1+ir,1+ic,1+iz] = tmp + intArr[1+ir,1+ic-1,1+iz] + intArr[1+ir,1+ic,1+iz-1] - intArr[1+ir,1+ic-1,1+iz-1] + reuse; 
+			reuse += tmp
+		end
+	end
+	return intArr
+end
 
 
 function integralArea( intArr::AbstractArray{<:Real,3}, TL, BR )

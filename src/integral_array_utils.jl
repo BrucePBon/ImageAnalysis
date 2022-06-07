@@ -1,16 +1,15 @@
-function mean_extrema_pad( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fmin=1, fmax=1, ovp=(0,0) ) where {T<:Real}
+function mean_derivative_mag_pad( img::Array{T,3}, rad::Tuple{Int64,Int64,Int64}, th_hard; fmin=1, fmax=1, ovp=(0,0,0) ) where {T<:Real}
 
     padsize = size( img ) .+ 2 .* ( 3 .* rad .+ 1 );
-    return mean_extrema_pad!( img, zeros(Float64, padsize .+ 1), 
-                              rad, th_hard, 
-                              zeros(Bool,size(img)), zeros(Bool,size(img)),
-                              fmin=fmin, fmax=fmax, ovp=ovp );
+    return mean_derivative_mag_pad!( img, zeros(Float64, padsize .+ 1), 
+                                   rad, th_hard, zeros(Float32,size(img)),
+                                   fmin=fmin, fmax=fmax, ovp=ovp );
 end
 
-function mean_extrema_pad!( img::Array{T,2}, intA::Array{<:AbstractFloat,2},
-                            rad::Tuple{Int64,Int64}, th_hard, 
-                            minima::Array{Bool,2}, maxima::Array{Bool,2};
-                            fmin=1, fmax=1, ovp=0 ) where {T<:Real}
+function mean_derivative_mag_pad!( img::Array{T,3}, intA::Array{<:AbstractFloat,3},
+                                   rad::Tuple{Int64,Int64,Int64}, th_hard, 
+                                   dermag::Array{<:AbstractFloat,3};
+                                   fmin=1, fmax=1, ovp=(0,0,0) ) where {T<:Real}
     # integral array
     @inbounds @simd for idx in 1:length(intA)
         intA[idx] = 0.0
@@ -18,140 +17,50 @@ function mean_extrema_pad!( img::Array{T,2}, intA::Array{<:AbstractFloat,2},
     integralArray_pad!( img, intA, 3 .* rad .+ 1 )   
     
     # convenient quantities
-    lows  = (  1,  1  ) .+ ( 3 .* rad .+ 1 );
+    lows  = (  1,  1, 1  ) .+ ( 3 .* rad .+ 1 );
     highs = size( img ) .+ ( 3 .* rad .+ 1 ); 
     npix  = prod(  (  2 .* rad .+ 1  )  ); 
-    vert  = ( 2*rad[1] + 1 - ovp[1], 0  ); 
-    horz  = ( 0, 2*rad[2] + 1  - ovp[2] );
+    vert  = ( 2*rad[1] + 1 - ovp[1], 0,  0 ); 
+    horz  = ( 0, 2*rad[2] + 1  - ovp[2], 0 );
+    deep  = ( 0, 0, 2*rad[2] + 1  - ovp[2] );
+
     
-    # these will accomodate the means and signs of the 9x9 mean neighbourhood
-    sums9 = zeros( Float64, 3, 3 ); 
-    signs = zeros(   Int64, 3, 3 ); 
+    # these will accomodate the means and signs of the 3x3x3 mean neighbourhood
+    sums27 = zeros( Float64, 3, 3, 3 ); 
+    mags27 = zeros(   Int64, 3, 3, 3 ); 
     
-    @inbounds for x in lows[2]:highs[2], y in lows[1]:highs[1]
+    @inbounds for z in lows[3]:highs[3], x in lows[2]:highs[2], y in lows[1]:highs[1]
         
-        tl = ( y,x ) .- rad .- 1; 
-        br = ( y,x ) .+ rad; 
+        tl = ( y,x,z ) .- rad .- 1; 
+        br = ( y,x,z ) .+ rad; 
         s0 = ImageAnalysis.integralArea( intA, tl, br );   
              
         ( s0/npix <= th_hard ) && ( continue; ) # s0/npix == mean of the central square
 
         idx = 1;
-        for xoff in -1:1, yoff in -1:1
-            off = vert .* yoff .+ horz .* xoff; 
-            sums9[idx] = ImageAnalysis.integralArea( intA, tl .+ off, br .+ off ); 
-            signs[idx] = sign( s0 - sums9[idx] ); 
+        for zoff in -1:1, xoff in -1:1, yoff in -1:1
+            off = vert .* yoff .+ horz .* xoff .+ deep .* zoff; 
+            sums27[idx] = ImageAnalysis.integralArea( intA, tl .+ off, br .+ off ); 
+            mags27[idx] = abs( s0 - sums27[idx] ); 
             idx += 1;   
         end
 
-        #=
-        sums9[1,1] = ImageAnalysis.integralArea( intA, tl .- vert .- horz, br .- vert .- horz );
-        sums9[2,1] = ImageAnalysis.integralArea( intA, tl         .- horz, br         .- horz );
-        sums9[3,1] = ImageAnalysis.integralArea( intA, tl .+ vert .- horz, br .+ vert .- horz ); 
-        sums9[1,2] = ImageAnalysis.integralArea( intA, tl .- vert        , br .- vert         );
-        sums9[2,2] = ImageAnalysis.integralArea( intA, tl                , br                 );
-        sums9[3,2] = ImageAnalysis.integralArea( intA, tl .+ vert        , br .+ vert         ); 
-        sums9[1,3] = ImageAnalysis.integralArea( intA, tl .- vert .+ horz, br .- vert .+ horz );
-        sums9[2,3] = ImageAnalysis.integralArea( intA, tl         .+ horz, br         .+ horz );
-        sums9[3,3] = ImageAnalysis.integralArea( intA, tl .+ vert .+ horz, br .+ vert .+ horz );
-        =#
-
-        score_min = 0
-        score_max = 0
-        for idx in 1:4
-            score_min += ( signs[idx] == -1 && signs[end-idx+1] == -1 )   
-            score_max += ( signs[idx] ==  1 && signs[end-idx+1] ==  1 )
+        mean_mag = 0.0
+        for idx in 1:27
+            mean_mag += mags27[idx]
         end
-        
-        minima[y-3*rad[1]-1,x-3*rad[2]-1] = score_min > fmin; 
-        maxima[y-3*rad[1]-1,x-3*rad[2]-1] = score_max > fmax; 
+
+        dermag[y-3*rad[1]-1,x-3*rad[2]-1,z-3*rad[3]-1] = mean_mag / (26 * npix); 
     end
 
-    return minima, maxima
+    return dermag
 end
 
 
 
 
 
-# sum ( x - mean )^2 = sum( x^2 + mean^2 - 2*x*mean ) = sum x^2 + N*mean^2 - 2*mean*sum x
-#                                                     = sum x^2 + mean*sum x - 2*mean*sum x
-#                                                     = sum x^2 - mean*sum x
 
-function mean_std_pad( img::Array{<:Real,2}, rad::Tuple{Int64,Int64}; typ=Float64 )
-
-    padsize = size( img ) .+ 2 .* rad;
-    return mean_std_pad!( img, zeros( typ, padsize .+ 1), zeros( typ, padsize .+ 1),
-                          rad, zeros( typ, size( img ) ) );
-end
-
-function mean_std_pad!( img::Array{<:Real,2}, intA::Array{T,2}, intA2::Array{T,2},
-                        rad::Tuple{Int64,Int64}, stds::Array{T,2} ) where {T<:AbstractFloat}
-
-    # integral array
-    @inbounds @simd for idx in 1:length(intA)
-         intA[idx] = 0.0
-        intA2[idx] = 0.0
-    end
-    integralArray_pad!( img,  intA, rad, fun=(x)->(T(x)) ); 
-    integralArray_pad!( img, intA2, rad, fun=(x)->(T(x)^2) );   
-        
-    # convenience variables
-    lows  = (  1,  1  ) .+ rad;
-    highs = size( img ) .+ rad;
-    npix  = prod( ( 2 .* rad .+ 1 ) );
-    
-    @inbounds for x in lows[2]:highs[2], y in lows[1]:highs[1]
-        
-        tl  = ( y, x ) .- rad .- 1; 
-        br  = ( y, x ) .+ rad; 
-        s0  = ImageAnalysis.integralArea(  intA, tl, br ); 
-        s02 = ImageAnalysis.integralArea( intA2, tl, br );
-        num = s02 - s0*s0/npix;
-        
-        stds[y-rad[1],x-rad[2]] = sqrt( num / npix )
-    end
-
-    return stds
-end
-
-
-
-
-function mean_thresh_pad( img::Array{T,2}, rad::Tuple{Int64,Int64}; fun=(x,y)->(x>y) ) where {T<:Real}
-
-    padsize = size( img ) .+ 2 .*rad;
-    return mean_thresh_pad!( img, zeros(Float64, padsize .+ 1),
-                             rad, zeros(Bool,size(img)), fun=fun );
-end
-
-function mean_thresh_pad!(  img::Array{T,2}, 
-                            intA::Array{<:AbstractFloat,2},
-                            rad::Tuple{Int64,Int64},
-                            filt::Array{Bool,2}; fun=(x,y)->(x>y) ) where {T<:Real}
-    # integral array
-    @inbounds @simd for idx in 1:length(intA)
-        intA[idx] = 0.0
-    end
-    integralArray_pad!( img, intA, rad )   
-    
-    # convenient quantities
-    lows  = (  1,  1  ) .+ rad;
-    highs = size( img ) .+ rad;
-    npix  = prod( ( 2 .* rad .+ 1 ) ); 
-    
-    @inbounds for x in lows[2]:highs[2], y in lows[1]:highs[1]
-        
-        tl = ( y,x ) .- rad .- 1; 
-        br = ( y,x ) .+ rad; 
-        s0 = ImageAnalysis.integralArea( intA, tl, br );    
-        mean = s0/npix;     
-        
-        filt[y-rad[1],x-rad[2]] = fun( img[ y-rad[1],x-rad[2] ], mean ) ; 
-    end
-
-    return filt
-end
 
 
 
@@ -219,115 +128,6 @@ function mean_extrema_pad2!( img::Array{T,2}, intA::Array{<:AbstractFloat,2},
     end
 
     return minima, maxima
-end
-
-function std_extrema_pad_filt( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fmin=1, fmax=1, m=1, fun=(x)->(x) ) where {T<:Real}
-
-    padsize = size( img ) .+ 2 .* ( 3 .* rad .+ 1 );
-    return std_extrema_pad_filt!( img,  
-                                  zeros(Float64, padsize .+ 1), zeros(Float64, padsize .+ 1), 
-                                  zeros(Float64, padsize .+ 1), zeros(Float64, padsize .+ 1), zeros(Float64, padsize .+ 1),
-                                  rad, th_hard, zeros(Float32,size(img)), 
-                                  fmin=fmin, fmax=fmax, m=m, fun=fun );
-end
-
-# sum( ( x - mean )^2 - ( xf - mean )^2 ) = sum( x^2 + mean^2 - 2*x*mean ) - sum( xf^2 + mean^2 - 2*xf*mean )
-
-function std_extrema_pad_filt!( img::Array{T,2}, 
-                                intA::Array{<:AbstractFloat,2}, intA2::Array{<:AbstractFloat,2}, 
-                                intF::Array{<:AbstractFloat,2}, intF2::Array{<:AbstractFloat,2}, Ns::Array{<:AbstractFloat,2},
-                                rad::Tuple{Int64,Int64}, th_hard, stds::Array{Float32,2};
-                                fmin=1, fmax=1, m=1, fun=(x)->(x) ) where {T<:Real}
-    # integral array
-    @inbounds @simd for idx in 1:length(intA)
-         intA[idx] = 0.0
-        intA2[idx] = 0.0
-    end
-
-    integralArray_pad!( img,  intA, 3 .* rad .+ 1 )  
-    integralArray_pad!( img, intA2, 3 .* rad .+ 1, fun=(x)->(x*x) ) 
-    integralArray_pad!( img,  intF, 3 .* rad .+ 1, fun=fun )  
-    integralArray_pad!( img, intF2, 3 .* rad .+ 1, fun=(x)->(fun(x)^2) )  
-    integralArray_pad!( img,    Ns, 3 .* rad .+ 1, fun=(x)->(fun(x)>0) );  
-
-
-    if th_hard == nothing
-        th_hard = ( intA[ end, end ] - intF[ end, end ] )/ length(img); # == mean of the image
-    end
-    
-    # convenient quantities
-    lows  = (  1,  1  ) .+ ( 3 .* rad .+ 1 );
-    highs = size( img ) .+ ( 3 .* rad .+ 1 ); 
-    npix  = prod( ( 2 .* rad .+ 1 ) ); 
-    vert  = ( 2*rad[1] + 1, 0 ); 
-    horz  = ( 0, 2*rad[2] + 1 );
-    
-    @inbounds for x in lows[2]:highs[2], y in lows[1]:highs[1]
-        
-        tl   = ( y,x ) .- rad .- 1; 
-        br   = ( y,x ) .+ rad; 
-
-        s0   = ImageAnalysis.integralArea(  intA, tl, br );  
-        s02  = ImageAnalysis.integralArea( intA2, tl, br );
-        sF   = ImageAnalysis.integralArea(  intF, tl, br );  
-        sF2  = ImageAnalysis.integralArea( intF2, tl, br );
-        nF   = ImageAnalysis.integralArea(    Ns, tl, br );
-
-        mean = ( s0 - sF )/( npix - nF ); 
-        std  = ( s02 + npix*mean*mean - 2*s0*mean ) - ( sF2 + nF*mean*mean - 2*sF*mean ); 
-
-        stds[y-3*rad[1]-1,x-3*rad[2]-1] = sqrt( abs(std) / npix ) # img[y-3*rad[1]-1,x-3*rad[2]-1] - mean # sqrt( std / npix ); 
-    end
-
-    return stds
-end
-
-function mean_thresh_pad_filt( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fun=(x)->(x) ) where {T<:Real}
-
-    padsize = size( img ) .+ 2 .* ( 3 .* rad .+ 1 );
-    return mean_thresh_pad_filt!( img, 
-                                  zeros(Float64, padsize .+ 1),
-                                  zeros(Float64, padsize .+ 1), zeros(Float64, padsize .+ 1),
-                                  rad, th_hard, zeros(Bool,size(img)),
-                                  fun=fun );
-end
-
-function mean_thresh_pad_filt!(  img::Array{T,2}, 
-                                 intA::Array{<:AbstractFloat,2},
-                                 intF::Array{<:AbstractFloat,2}, numF::Array{<:AbstractFloat,2},
-                                 rad::Tuple{Int64,Int64}, th_hard, 
-                                 filt::Array{Bool,2};
-                                 fun=(x)->(x) ) where {T<:Real}
-    # integral array
-    @inbounds @simd for idx in 1:length(intA)
-        intA[idx] = 0.0
-    end
-    integralArray_pad!( img, intA, 3 .* rad .+ 1 )   
-    integralArray_pad!( img, intF, 3 .* rad .+ 1, fun=fun )  # fun is a condition, x = cond * x
-    integralArray_pad!( img, numF, 3 .* rad .+ 1, fun=(x)->(fun(x)>0) ); # counts the num of pixels that fulfill the condition
-    
-    if th_hard == nothing
-        th_hard = intA[ end, end ] / length(img); # == mean of the image
-    end
-    
-    # convenient quantities
-    lows  = (  1,  1  ) .+ ( 3 .* rad .+ 1 );
-    highs = size( img ) .+ ( 3 .* rad .+ 1 ); 
-    npix  = prod( ( 2 .* rad .+ 1 ) ); 
-    
-    @inbounds for x in lows[2]:highs[2], y in lows[1]:highs[1]
-        
-        tl = ( y,x ) .- rad .- 1; 
-        br = ( y,x ) .+ rad; 
-        s0 = ImageAnalysis.integralArea( intA, tl, br );  
-        sF = ImageAnalysis.integralArea( intF, tl, br ); 
-        nF = ImageAnalysis.integralArea( numF, tl, br );   
-        mean = ( s0 - sF )/( npix - nF );     
-        
-        filt[y-3*rad[1]-1,x-3*rad[2]-1] = img[y-3*rad[1]-1,x-3*rad[2]-1] > mean; 
-    end
-
-    return filt
 end
 
 
@@ -401,69 +201,6 @@ end
 
 
 
-function mean_thresh_count( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fun=(x,y)->(x<y), f=1.0 ) where {T<:Real}
-
-    padsize = size( img ) .+ 2 .* rad; #( 3 .* rad .+ 1 );
-    return mean_thresh_count!( img, 
-                               zeros(Float64, padsize .+ 1),
-                               rad, th_hard, zeros(Int64,size(img)), fun=fun, f=f );
-end
-
-function mean_thresh_count!(  img::Array{T,2}, 
-                              intA::Array{<:AbstractFloat,2},
-                              rad::Tuple{Int64,Int64}, th_hard, 
-                              counts::Array{Int64,2}; fun=(x,y)->(x<y), f=1.0 ) where {T<:Real}
-    # Building integral array
-    # 1-. Setting intA to zero (redudant when calling out-of-place).
-    @inbounds @simd for idx in 1:length(intA)
-        intA[idx] = 0.0
-    end
-    # 2-. Populating integral array
-    integralArray_pad!( img, intA, rad ); #3 .* rad .+ 1 )   
-    
-    # Checking the threshold value
-    if th_hard == nothing
-        th_hard = intA[ end, end ] / length(img); # == mean of the image
-    end
-    
-    # Convenient quantities
-    npix   = prod( ( 2 .* rad .+ 1 ) ); 
-    y0, x0 = (  1,  1  ) .+ rad; #( 3 .* rad .+ 1 ); 
-    y1, x1 = size( img ) .+ rad; #( 3 .* rad .+ 1 ); 
-    ry, rx = rad; 
-    
-    for x in x0:x1, y in y0:y1
-        
-        # top left (tl) and bottom right (br) of the central patch
-        tl = ( y, x ) .- rad .- 1; 
-        br = ( y, x ) .+ rad;      
-        s0 = ImageAnalysis.integralArea( intA, tl, br );    
-        local_mean = s0*f/npix; 
-
-        if local_mean < th_hard
-            counts[ y-y0+1, x-x0+1 ] = 1000000; 
-        end
-        
-        # For each pixel in the central patch that falls inside the image (we added padding to the integral array)
-        # add +1 if the pixel is above the local mean. 
-        
-        for col in max(tl[2]+1,x0):min(br[2],x1)
-            for row in max(tl[1]+1,y0):min(br[1],y1)
-
-                counts[ row-y0+1,col-x0+1 ] += fun( img[ row-y0+1,col-x0+1 ], local_mean )
-        end end
-        
-        #filt[y-3*rad[1]-1,x-3*rad[2]-1] = img[ y-3*rad[1]-1,x-3*rad[2]-1 ] > local_mean*0.95 ; 
-    end
-
-    for idx in 1:length(counts)
-        if counts[idx] > 1000000
-            counts[idx] = -1
-        end
-    end
-
-    return counts
-end
 
 
 
@@ -521,8 +258,6 @@ function mean_laplacian_pad!( img::Array{T,2}, intA::Array{<:AbstractFloat,2},
 
     return laplacian
 end
-
-
 
 
 function mean_laplacian_pad_filt( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fun=(x)->(x), ovp=(0,0) ) where {T<:Real}
