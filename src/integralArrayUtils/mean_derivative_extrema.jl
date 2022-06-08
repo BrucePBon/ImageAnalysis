@@ -243,7 +243,7 @@ function mean_maxima_pad_masked!( img::Array{T,3}, mask::Array{Bool,3},
     return maxima
 end
 
-function iterative_maxima( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5 )
+function iterative_maxima( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5, fmax0=10 )
 
     vol   = copy(vol1); 
     h,w,d = size(vol); 
@@ -254,7 +254,7 @@ function iterative_maxima( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5 )
     maxima  = zeros( Bool, size(vol) ); 
 
     integralArray_pad!( vol, intA, 3 .* rad .+ 1 ); 
-    mean_maxima_pad!( vol, intA, rad ,th_hard, maxima, fmax=fmax, ovp=ovp ); 
+    mean_maxima_pad!( vol, intA, rad ,th_hard, maxima, fmax=fmax0, ovp=ovp ); 
 
     mask  = zeros( Bool, size(vol) ); 
     print( "iteration number: ")
