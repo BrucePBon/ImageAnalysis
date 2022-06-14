@@ -1,17 +1,17 @@
 ##### BOTH MINIMA AND MAXIMA
 
-function mean_extrema_pad( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fmin=1, fmax=1, ovp=(0,0) ) where {T<:Real}
+function mean_extrema_pad( img::Array{T,2}, rad::Tuple{Int64,Int64}, th_hard; fmin=1, fmax=1, ovp=(0,0), f=1 ) where {T<:Real}
 
     padsize = size( img ) .+ 2 .* ( 3 .* rad .+ 1 );
     return mean_extrema_pad!( img, zeros(Float64, padsize .+ 1), rad, th_hard, 
                               zeros(Bool,size(img)), zeros(Bool,size(img)),
-                              fmin=fmin, fmax=fmax, ovp=ovp );
+                              fmin=fmin, fmax=fmax, ovp=ovp, f=f );
 end
 
 function mean_extrema_pad!( img::Array{T,2}, intA::Array{<:AbstractFloat,2},
                             rad::Tuple{Int64,Int64}, th_hard, 
                             minima::Array{Bool,2}, maxima::Array{Bool,2};
-                            fmin=1, fmax=1, ovp=0 ) where {T<:Real}
+                            fmin=1, fmax=1, ovp=0, f=1 ) where {T<:Real}
     # integral array
     @inbounds @simd for idx in 1:length(intA)
         intA[idx] = 0.0
@@ -41,7 +41,7 @@ function mean_extrema_pad!( img::Array{T,2}, intA::Array{<:AbstractFloat,2},
         for xoff in -1:1, yoff in -1:1
             off = vert .* yoff .+ horz .* xoff; 
             sums9[idx] = ImageAnalysis.integralArea( intA, tl .+ off, br .+ off ); 
-            signs[idx] = sign( s0 - sums9[idx] ); 
+            signs[idx] = sign( s0*f - sums9[idx] ); 
             idx += 1;   
         end
 
@@ -123,14 +123,14 @@ end
 
 #### ONLY MAXIMA 
 
-function mean_maxima_pad( vol::Array{T,3}, rad::Tuple{Int64,Int64,Int64}, th_hard; fmax=1, ovp=(0,0,0) ) where {T<:Real}
+function mean_maxima_pad( vol::Array{T,3}, rad::Tuple{Int64,Int64,Int64}, th_hard; fmax=1, ovp=(0,0,0), f=1 ) where {T<:Real}
 
     padsize = size( vol ) .+ 2 .* ( 3 .* rad .+ 1 );
     intA    = zeros( Float64, padsize .+ 1 )
     maxima  = zeros( Bool, size(vol) ); 
 
     integralArray_pad!( vol, intA, 3 .* rad .+ 1 );
-    mean_maxima_pad!( vol, intA, rad, th_hard, maxima, fmax=fmax, ovp=ovp );
+    mean_maxima_pad!( vol, intA, rad, th_hard, maxima, fmax=fmax, ovp=ovp, f=f );
 
     return maxima
 end
@@ -139,7 +139,7 @@ end
 # for nsqecc struc surface
 function mean_maxima_pad!( img::Array{T,3}, intA::Array{<:AbstractFloat,3},
                            rad::Tuple{Int64,Int64,Int64}, th_hard, 
-                           maxima::Array{Bool,3}; fmax=1, ovp=(0,0,0) ) where {T<:Real}
+                           maxima::Array{Bool,3}; fmax=1, ovp=(0,0,0), f=1 ) where {T<:Real}
 
     # convenient quantities
     lows  = (  1,  1, 1  ) .+ ( 3 .* rad .+ 1 );
@@ -166,7 +166,7 @@ function mean_maxima_pad!( img::Array{T,3}, intA::Array{<:AbstractFloat,3},
         for zoff in -1:1, xoff in -1:1, yoff in -1:1
             off = vert .* yoff .+ horz .* xoff .+ deep .* zoff; 
             sums27[idx] = ImageAnalysis.integralArea( intA, tl .+ off, br .+ off ); 
-            signs[ idx] = sign( s0 - sums27[idx] ); 
+            signs[ idx] = sign( s0*f - sums27[idx] ); 
             idx += 1;   
         end
 
@@ -282,18 +282,18 @@ end
 
 #### ONLY MINIMA 
 
-function mean_minima_pad( img::Array{T,3}, rad::Tuple{Int64,Int64,Int64}, th_hard; fmin=1, ovp=(0,0,0) ) where {T<:Real}
+function mean_minima_pad( img::Array{T,3}, rad::Tuple{Int64,Int64,Int64}, th_hard; fmin=1, ovp=(0,0,0), f=1 ) where {T<:Real}
 
     padsize = size( img ) .+ 2 .* ( 3 .* rad .+ 1 );
     return mean_minima_pad!( img, zeros(Float64, padsize .+ 1), rad, th_hard, 
-                             zeros(Bool,size(img)), fmin=fmin, ovp=ovp );
+                             zeros(Bool,size(img)), fmin=fmin, ovp=ovp, f=f );
 end
 
 
 # for nsqecc struc surface
 function mean_minima_pad!( img::Array{T,3}, intA::Array{<:AbstractFloat,3},
                            rad::Tuple{Int64,Int64,Int64}, th_hard, 
-                           minima::Array{Bool,3}; fmin=1, ovp=(0,0,0) ) where {T<:Real}
+                           minima::Array{Bool,3}; fmin=1, ovp=(0,0,0), f=1 ) where {T<:Real}
     # integral array
     @inbounds @simd for idx in 1:length(intA)
     intA[idx] = 0.0
@@ -324,7 +324,7 @@ function mean_minima_pad!( img::Array{T,3}, intA::Array{<:AbstractFloat,3},
         for zoff in -1:1, xoff in -1:1, yoff in -1:1
             off = vert .* yoff .+ horz .* xoff .+ deep .* zoff; 
             sums27[idx] = ImageAnalysis.integralArea( intA, tl .+ off, br .+ off ); 
-            signs[ idx] = sign( s0 - sums27[idx] ); 
+            signs[ idx] = sign( s0*f - sums27[idx] ); 
             idx += 1;   
         end
 
