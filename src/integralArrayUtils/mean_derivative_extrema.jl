@@ -243,7 +243,7 @@ function mean_maxima_pad_masked!( img::Array{T,3}, mask::Array{Bool,3},
     return maxima
 end
 
-function iterative_maxima( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5, fmax0=10 )
+function iterative_maxima_old( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5, fmax0=10 )
 
     vol   = copy(vol1); 
     h,w,d = size(vol); 
@@ -273,6 +273,45 @@ function iterative_maxima( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5, fma
         end 
         intA = integralArray_pad!( vol, intA, 3 .* rad .+ 1 ); 
         mean_maxima_pad_masked!( vol, mask, intA, rad ,th_hard, maxima, fmax=fmax, ovp=ovp ); 
+    end
+    println()
+
+    return maxima
+end
+
+function iterative_maxima( vol1, rad, th_hard; fmax=1, ovp=(0,0,0), iters=5, fmax0=10 )
+
+    vol   = copy(vol1); 
+    h,w,d = size(vol); 
+
+    # initial maxima computation
+    padsize = size( vol ) .+ 2 .* ( 3 .* rad .+ 1 );
+    intA    = zeros(Float64, padsize .+ 1)
+    maxima  = zeros( Bool, size(vol) ); 
+
+    integralArray_pad!( vol, intA, 3 .* rad .+ 1 ); 
+    mean_maxima_pad!( vol, intA, rad ,th_hard, maxima, fmax=fmax0, ovp=ovp ); 
+
+    mask  = zeros( Bool, size(vol) ); 
+    print( "iteration number: ")
+    for i in 1:iters
+        print( i, "," );
+        for z in 2:d-1, x in 2:w-1, y in 2:h-1
+            # eliminate maxima and label neighbours for processing
+            if maxima[y,x,z] 
+                minval = Inf
+                for yoff in -1:1, xoff in -1:1, zoff in -1:1
+                    minval = min( vol[y+yoff,x+xoff,z+zoff], minval )
+                    mask[y+yoff,x+xoff,z+zoff] = true; 
+                end
+                 vol[y,x,z] = minval;
+            end
+        end 
+        intA = integralArray_pad!( vol, intA, 3 .* rad .+ 1 ); 
+        mean_maxima_pad_masked!( vol, mask, intA, rad ,th_hard, maxima, fmax=fmax, ovp=ovp ); 
+        @inbounds @simd for idx in 1:length(mask) 
+            mask[idx] = false;
+        end
     end
     println()
 

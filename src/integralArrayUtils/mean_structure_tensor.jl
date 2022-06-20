@@ -3,25 +3,30 @@ using LinearAlgebra
 
 ########################### 2D
 
-
-
-function mean_structure_tensor( img::Array{<:Real,2}; square_size=(5,5), grid_size=(5,5), overlap=(0,0), threshold=0, mindist=5 )
-
-    planarity = zeros( Float64, size(img) ); # planarity score for each (or a subset) of pixel in the input image
+function compute_pad_rad( square_size, grid_size, overlap )
 
     sq_rad    = div.( square_size .- 1, 2 );       #  sq_rad  + 1 +  sq_rad  = ( 2 *  sq_rad  + 1 ) = square_size
     grid_rad  = div.(  grid_size  .- 1, 2 );       # grid_rad + 1 + grid_rad = ( 2 * grid_rad + 1 ) =  grid_size 
     pad_rad   = grid_rad .* square_size .+ sq_rad; # ( grid_rad * sq_size ) + sq_rad + 1 + sq_rad + ( grid_rad * sq_size ) = ( 2 * ( grid_rad * sq_size + sq_rad ) )
     pad_rad   = pad_rad .- overlap .* grid_rad;    # krita explained
 
+    return pad_rad; 
+end
+
+function mean_structure_tensor( img::Array{<:Real,2}; square_size=(5,5), grid_size=(5,5), overlap=(0,0), threshold=0, mindist=0, maxdist=Inf )
+
+    planarity = zeros( Float64, size(img) ); # planarity score for each (or a subset) of pixel in the input image
+    sq_rad    = div.( square_size .- 1, 2 );       
+    grid_rad  = div.(  grid_size  .- 1, 2 );     
+    pad_rad   = compute_pad_rad( square_size, grid_size, overlap ); 
     padsize   = size( img ) .+ 2 .* pad_rad ;
     intA      = zeros(Float64, padsize .+ 1);
     integralArray_pad!( img, intA, pad_rad );
 
-    return mean_structure_tensor!( img, intA, planarity, sq_rad, grid_rad, overlap, pad_rad, threshold, mindist );
+    return mean_structure_tensor!( img, intA, planarity, sq_rad, grid_rad, overlap, pad_rad, threshold, mindist, maxdist );
 end
 
-function mean_structure_tensor!( img::Array{<:Real,2}, intA, planarity, square_rad, grid_rad, overlap, pad_rad, threshold=0, mindist=5 )
+function mean_structure_tensor!( img::Array{<:Real,2}, intA, planarity, square_rad, grid_rad, overlap, pad_rad, threshold=0, mindist=0, maxdist=Inf )
     # convenient quantities
     lows  = (  1,  1  ) .+ ( pad_rad );
     highs = size( img ) .+ ( pad_rad );
@@ -29,7 +34,7 @@ function mean_structure_tensor!( img::Array{<:Real,2}, intA, planarity, square_r
     horz  = ( 0, 2*square_rad[2] + 1  - overlap[2] );
     npix  = prod(( 2 .* square_rad .+ 1 )); 
 
-    normv = [ (sqrt(y*y + x*x) <  mindist) ? (0.0, 0.0) : (y,x)./sqrt(y*y + x*x) for y in -grid_rad[1]:grid_rad[1], x in -grid_rad[2]:grid_rad[2] ];
+    normv = [ (mindist < sqrt(y*y + x*x) < maxdist) ? (y,x)./sqrt(y*y + x*x)  : (0.0, 0.0) for y in -grid_rad[1]:grid_rad[1], x in -grid_rad[2]:grid_rad[2] ];
     normv[grid_rad[1]+1,grid_rad[2]+1] = ( 0.0, 0.0 )
     println("testing", size(normv))
 
@@ -206,7 +211,8 @@ function mean_structure_tensor!( vol::Array{<:Real,3}, intA, planarity, cube_rad
                                             #      plane              not plane
         smallratio   = (1-e3*3/sum(evals)); # ==1 (e[0]<<<e[:]), ==0 (e[3]=1/e[:]), 
         similarratio = 1/(e1/e2 + e2/e1);   # ==1 (e[1]==e[2] ), ==0 (e[1]!=e[2] )
-        escore = similarratio*smallratio;   # the smaller the better
+        escore = similarratio*smallratio;   # 1 is the best
+        escore = isnan(escore) ? 0.0 : escore
 
         false &&  println( "\t\t", round.(structure_tensor,digits=3), "\t", (e1,e2) )
 
