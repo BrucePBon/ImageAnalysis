@@ -9,7 +9,7 @@ end
 function mean_thresh_pad!(  img::Array{T,2}, 
                             intA::Array{<:AbstractFloat,2},
                             rad::Tuple{Int64,Int64},
-                            filt::Array{Bool,2}; fun=(x,y)->(x>y) ) where {T<:Real}
+                            filt::Array{<:Real,2}; fun=(x,y)->(x>y) ) where {T<:Real}
     # integral array
     @inbounds @simd for idx in 1:length(intA)
         intA[idx] = 0.0
@@ -25,10 +25,11 @@ function mean_thresh_pad!(  img::Array{T,2},
         
         tl = ( y,x ) .- rad .- 1; 
         br = ( y,x ) .+ rad; 
-        s0 = ImageAnalysis.integralArea( intA, tl, br );    
-        mean = s0/npix;     
+        s0 = ImageAnalysis.integralArea( intA, tl, br ); 
+        # mean = s0/npix; 
+        mean = s0 / prod(  min.(br,highs) .- max.(tl,lows) .+ 1 )    
         
-        filt[y-rad[1],x-rad[2]] = fun( img[ y-rad[1],x-rad[2] ], mean ) ; 
+        filt[y-rad[1],x-rad[2]] = fun( img[ y-rad[1],x-rad[2] ], mean ); 
     end
 
     return filt
@@ -49,7 +50,7 @@ function mean_thresh_pad_filt!(  img::Array{T,2},
                                  intA::Array{<:AbstractFloat,2},
                                  intF::Array{<:AbstractFloat,2}, numF::Array{<:AbstractFloat,2},
                                  rad::Tuple{Int64,Int64}, th_hard, 
-                                 filt::Array{Bool,2};
+                                 filt::Array{<:Real,2};
                                  fun=(x)->(x) ) where {T<:Real}
     # integral array
     @inbounds @simd for idx in 1:length(intA)
@@ -102,7 +103,7 @@ function mean_thresh_count!(  img::Array{T,2},
         intA[idx] = 0.0
     end
     # 2-. Populating integral array
-    integralArray_pad!( img, intA, rad ); #3 .* rad .+ 1 )   
+    integralArray_pad!( img, intA, rad );  
     
     # Checking the threshold value
     if th_hard == nothing
@@ -111,8 +112,8 @@ function mean_thresh_count!(  img::Array{T,2},
     
     # Convenient quantities
     npix   = prod( ( 2 .* rad .+ 1 ) ); 
-    y0, x0 = (  1,  1  ) .+ rad; #( 3 .* rad .+ 1 ); 
-    y1, x1 = size( img ) .+ rad; #( 3 .* rad .+ 1 ); 
+    y0, x0 = (  1,  1  ) .+ rad;
+    y1, x1 = size( img ) .+ rad;
     ry, rx = rad; 
     
     for x in x0:x1, y in y0:y1
@@ -210,4 +211,40 @@ function mean_thresh_count!(  img::Array{T,3},
     end
 
     return counts
+end
+
+
+function mean_thresh_pad( img::Array{T,3}, rad; fun=(x,y)->(x>y) ) where {T<:Real}
+
+    padsize = size( img ) .+ 2 .*rad;
+    return mean_thresh_pad!( img, zeros(Float64, padsize .+ 1),
+                             rad, zeros(Bool,size(img)), fun=fun );
+end
+
+function mean_thresh_pad!(  img::Array{T,3}, 
+                            intA::Array{<:AbstractFloat,3},
+                            rad::Tuple{Int64,Int64,Int64},
+                            filt::Array{Bool,3}; fun=(x,y)->(x>y) ) where {T<:Real}
+    # integral array
+    @inbounds @simd for idx in 1:length(intA)
+        intA[idx] = 0.0
+    end
+    integralArray_pad!( img, intA, rad )   
+    
+    # convenient quantities
+    lows  = (  1,  1, 1  ) .+ rad;
+    highs = size(  img  ) .+ rad;
+    npix  = prod( ( 2 .* rad .+ 1 ) ); 
+    
+    @inbounds for z in lows[3]:highs[3], x in lows[2]:highs[2], y in lows[1]:highs[1]
+        
+        tl = ( y,x,z ) .- rad .- 1; 
+        br = ( y,x,z ) .+ rad; 
+        s0 = ImageAnalysis.integralArea( intA, tl, br );    
+        mean = s0/npix;     
+        
+        filt[y-rad[1],x-rad[2],z-rad[3]] = fun( img[ y-rad[1],x-rad[2],z-rad[3] ], mean ) ; 
+    end
+
+    return filt
 end

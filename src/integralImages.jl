@@ -2,8 +2,8 @@
 	2D
 """
 
-function integralArray( img::AbstractArray{<:Real,2}; type=Float32, fun=(x)->(x) )
-	return integralArray!( img, zeros( type, size(img) .+ 1 ), fun=fun )
+function integralArray( img::AbstractArray{<:Real,2}; typ=Float32, fun=(x)->(x) )
+	return integralArray!( img, zeros( typ, size(img) .+ 1 ), fun=fun )
 end
 
 function integralArray!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{<:AbstractFloat,2}; fun=(x)->(x) ) 
@@ -17,6 +17,16 @@ end
 function integralArea( intArr::AbstractArray{<:Real,2}, TL, BR )
 	TL   = TL .+ 1;
 	BR   = BR .+ 1;
+	area = intArr[BR[1],BR[2]] - intArr[BR[1],TL[2]] - intArr[TL[1],BR[2]] + intArr[TL[1],TL[2]]
+end
+
+function integralArea_checked( intArr::AbstractArray{<:Real,2}, TL::NTuple{3,<:Integer}, BR::NTuple{3,<:Integer} )
+	return integralArea_checked( intArr, TL[1:2], BR[1:2] )
+end
+
+function integralArea_checked( intArr::AbstractArray{<:Real,2}, TL, BR )
+	TL = TL .+ 1; TL = max.( (1,1), TL ); TL = min.( size(intArr), TL );
+	BR = BR .+ 1; BR = max.( (1,1), BR ); BR = min.( size(intArr), BR );
 	area = intArr[BR[1],BR[2]] - intArr[BR[1],TL[2]] - intArr[TL[1],BR[2]] + intArr[TL[1],TL[2]]
 end
 
@@ -62,7 +72,7 @@ function integralArrayIIM!( img::AbstractArray{<:Real,2}, intArr::AbstractArray{
 end
 
 function integralAreaIIM( intArr::AbstractArray{<:Real,3}, z,TL, BR )
-	TL   = TL .+ 1;
+	TL   = TL .+ 1; 
 	BR   = BR .+ 1;
 	area = intArr[BR[1],BR[2],z] - intArr[BR[1],TL[2],z] - intArr[TL[1],BR[2],z] + intArr[TL[1],TL[2],z]
 end
@@ -263,6 +273,17 @@ end
 function integralArea( intArr::AbstractArray{<:Real,3}, TL, BR )
 	TL = TL .+ 1; 
 	BR = BR .+ 1; 
+	area  = intArr[BR[1],BR[2],BR[3]] - intArr[TL[1],TL[2],TL[3]]
+	area -= intArr[TL[1],BR[2],BR[3]] + intArr[BR[1],TL[2],BR[3]] + intArr[BR[1],BR[2],TL[3]]
+	area += intArr[BR[1],TL[2],TL[3]] + intArr[TL[1],BR[2],TL[3]] + intArr[TL[1],TL[2],BR[3]]
+    return area
+end
+
+function integralArea_checked( intArr::AbstractArray{<:Real,3}, TL, BR )
+
+	TL = TL .+ 1; TL = max.( 1, TL ); TL = min.( size(intArr), TL );
+	BR = BR .+ 1; BR = max.( 1, BR ); BR = min.( size(intArr), BR );
+	
 	area  = intArr[BR[1],BR[2],BR[3]] - intArr[TL[1],TL[2],TL[3]]
 	area -= intArr[TL[1],BR[2],BR[3]] + intArr[BR[1],TL[2],BR[3]] + intArr[BR[1],BR[2],TL[3]]
 	area += intArr[BR[1],TL[2],TL[3]] + intArr[TL[1],BR[2],TL[3]] + intArr[TL[1],TL[2],BR[3]]

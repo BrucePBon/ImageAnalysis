@@ -35,6 +35,4 @@ function bilinear_interpolation( img, grid; sz=4 )
 
 	startx, stepx = w/(gw+2)
 	starty, stepy = h/(gh+2)
-
-	for
 end

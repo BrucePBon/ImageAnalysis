@@ -1,3 +1,32 @@
+# In the performance benchmarks, I found that muladd is very (if not the most) performant with all data
+# types: Tuples, StaticArrays and basic Arrays
+
+mag_( a ) = sqrt( dot_( a, a ) ); 
+dot_( a, b ) = dot_muladd( a, b )
+cross_( a, b ) = cross_muladd( a, b ) 
+normdot_( a, b ) = dot_(a,b) / sqrt( dot_(a,a) * dot_(b,b) );
+normcross_( a, b ) = cross_( a, b ) ./ mag_( cross_( a, b ) ); 
+
+dot_muladd(   a::NTuple{2,T}, b::NTuple{2,T} ) where {T} = muladd( a[1], b[1], a[2]*b[2] ); 
+dot_muladd(   a::NTuple{3,T}, b::NTuple{3,T} ) where {T} = muladd( a[1], b[1], a[2]*b[2] ) + a[3]*b[3];
+
+# 2D cross-product is not defined, but you can get a 2D vector orthogonal to v1 by ( -v1[2], v1[1] ) or ( v1[2], -v1[1] ); 
+cross_muladd( a::NTuple{2,T}, b::NTuple{2,T} ) where {T} = ( a[2] - b[2], b[1] - a[1] );  
+cross_muladd( a::NTuple{3,T}, b::NTuple{3,T} ) where {T} = ( muladd( a[2], b[3], -1*a[3]*b[2] ), muladd( a[3], b[1], -1*a[1]*b[3] ), muladd( a[1], b[2], -1*a[2]*b[1] ) )
+
+# Transforming DxN arrays of points, where D is the dimension of the points (2 or 3) and N is the number of points,
+# into an array of Tuples. Operations on tuples are (in many cases) much faster than on arrays. 
+# TODO: Test the need for this, since muladd-based function are also fast on arrays. 
+
+function DN2Tuple( DNpoints::Array{T,2} ) where {T}
+	D, N = size( DNpoints ); 
+	tuplepoints = Array{NTuple{D,T},1}(undef,N); 
+	@inbounds for col in 1:size(points,2)
+		tuplepoints[col] = Tuple( points[:,col] );
+	end
+	return tuplepoints
+end
+
 """ Computing the mean and standard deviation in one loop"""
 function meanstd( img; typ=Float32 ) 
 

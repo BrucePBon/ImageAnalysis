@@ -27,7 +27,7 @@ function FFTConvolution!( image::Array{<:Real,N}, kernel::Array{<:Real,N}, conv:
 	FFTW.fft!( padk );
 
 	@inbounds @simd for idx in 1:length(padi)
-	padi[idx] = padi[idx] * padk[idx]
+		padi[idx] = padi[idx] * padk[idx]
 	end
 
 	FFTW.ifft!( padi ); 
@@ -58,7 +58,7 @@ function FFTConvolution_crop!( image::Array{<:Real,N}, kernel::Array{<:Real,N}, 
 	padi  = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
 	padi[ 1:size(image,1), 1:size(image,2), 1:size(image,3) ] .= convert.( Complex{T}, image )
 
-	FFTW.fft!( padi  );
+	FFTW.fft!( padi );
 	FFTW.fft!( padk );
 
 	@inbounds @simd for idx in 1:length(padi)

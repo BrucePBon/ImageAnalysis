@@ -2,6 +2,7 @@
 # sum ( x - mean )^2 = sum( x^2 + mean^2 - 2*x*mean ) = sum x^2 + N*mean^2 - 2*mean*sum x
 #                                                     = sum x^2 + mean*sum x - 2*mean*sum x
 #                                                     = sum x^2 - mean*sum x
+#                                                     = sum x^2 - sum( x )^2/n
 
 function mean_std_pad( img::Array{<:Real,2}, rad::Tuple{Int64,Int64}; typ=Float64 )
 
@@ -32,9 +33,9 @@ function mean_std_pad!( img::Array{<:Real,2}, intA::Array{T,2}, intA2::Array{T,2
         br  = ( y, x ) .+ rad; 
         s0  = ImageAnalysis.integralArea(  intA, tl, br ); 
         s02 = ImageAnalysis.integralArea( intA2, tl, br );
-        num = s02 - s0*s0/npix;
+        var = s02/npix - (s0/npix)^2;
         
-        stds[y-rad[1],x-rad[2]] = sqrt( num / npix )
+        stds[y-rad[1],x-rad[2]] = sqrt( abs( var ) )
     end
 
     return stds
