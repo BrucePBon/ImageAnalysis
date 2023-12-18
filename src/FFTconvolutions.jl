@@ -53,10 +53,10 @@ function FFTConvolution_crop!( image::Array{<:Real,N}, kernel::Array{<:Real,N}, 
 	@assert all( size(conv) .== size(image) ); 
 	
 	padk = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
-	padk[ 1:size(kernel,1), 1:size(kernel,2), 1:size(kernel,3) ] .= convert.( Complex{T}, kernel )
+	padk[ UnitRange.( 1, size(kernel) )... ] .= convert.( Complex{T}, kernel )
 
 	padi  = zeros( Complex{T}, size(image) .+ size(kernel) .- 1 );
-	padi[ 1:size(image,1), 1:size(image,2), 1:size(image,3) ] .= convert.( Complex{T}, image )
+	padi[ UnitRange.( 1, size(image) )... ] .= convert.( Complex{T}, image )
 
 	FFTW.fft!( padi );
 	FFTW.fft!( padk );
@@ -67,13 +67,14 @@ function FFTConvolution_crop!( image::Array{<:Real,N}, kernel::Array{<:Real,N}, 
 
 	FFTW.ifft!( padi ); 
 
-	offs = div.( size( kernel ), 2 ); 
-	zoff = ( N < 3 ) ? 0 : offs[3]; 
+	yoff = div( size(kernel,1), 2 )
+	xoff = ( N < 2 ) ? 0 : div( size(kernel,2), 2 );
+	zoff = ( N < 3 ) ? 0 : div( size(kernel,3), 2 ); 
 
 	for zet in 1+zoff:size(image,3)+zoff
-		for col in 1+offs[2]:size(image,2)+offs[2]
-		@simd for row in 1+offs[1]:size(image,1)+offs[1]
-			conv[row-offs[1],col-offs[2],zet-zoff] = real( padi[row,col,zet] )
+		for col in 1+xoff:size(image,2)+xoff
+		@simd for row in 1+yoff:size(image,1)+yoff
+			conv[row-yoff,col-xoff,zet-zoff] = real( padi[row,col,zet] )
 	end end end
 
 	return conv
